@@ -1,58 +1,214 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+<div align="center">
+  <br />
+  <h1>🎟️ Ticketing System REST API</h1>
+  <p><strong>The High-Performance, Secure Laravel 13 Event Booking & E-Ticketing Engine</strong></p>
+  <p><em>Equipped with dynamic ticket tiers, automated quota tracking, Midtrans payment integration, and Laravel Sanctum auth.</em></p>
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+  <p>
+    <a href="https://laravel.com"><img src="https://img.shields.io/badge/Framework-Laravel%2013-FF2D20?style=flat-square&logo=laravel" alt="Laravel 13" /></a>
+    <a href="https://php.net"><img src="https://img.shields.io/badge/Language-PHP%208.3+-777BB4?style=flat-square&logo=php" alt="PHP 8.3+" /></a>
+    <a href="https://laravel.com/docs/sanctum"><img src="https://img.shields.io/badge/Auth-Laravel%20Sanctum-4F46E5?style=flat-square&logo=laravel" alt="Laravel Sanctum" /></a>
+    <a href="https://pestphp.com"><img src="https://img.shields.io/badge/Testing-Pest%20PHP%205-F43F5E?style=flat-square&logo=pest" alt="Pest PHP" /></a>
+    <a href="https://www.sqlite.org"><img src="https://img.shields.io/badge/Database-SQLite%20%7C%20MySQL-003B57?style=flat-square&logo=sqlite" alt="Database" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="MIT License" /></a>
+  </p>
+  <br />
+</div>
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## ⚡ What is Ticketing System API?
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+**Ticketing System API** is the backend engine powering the event booking platform. Built with **Laravel 13** and **PHP 8.3+**, it delivers robust, authenticated RESTful endpoints for discovering events, managing multi-tier ticket quotas, processing orders, and authenticating users.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+---
 
-## Learning Laravel
+## 🏗️ Architecture & Data Flow
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+```mermaid
+flowchart TD
+    Client[Ticketing Frontend Client] -->|HTTP / JSON| Router[Laravel 13 API Routing]
+    
+    subgraph Security [Security & Middleware]
+        Router --> Sanctum[Sanctum Auth Middleware]
+        Router --> RoleGate[RoleMiddleware: Admin & Customer]
+    end
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+    subgraph Controllers [Application Controllers]
+        Sanctum --> AuthCtrl[AuthController: Register, Login, Me]
+        RoleGate --> AdminEventCtrl[Admin Event & TicketType Controller]
+        Router --> PublicEventCtrl[Public Event Catalog Controller]
+    end
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+    subgraph CoreDomain [Eloquent Models & Logic]
+        PublicEventCtrl --> EventModel[Event Model]
+        AdminEventCtrl --> EventModel
+        AdminEventCtrl --> TicketTypeModel[TicketType Model]
+        AuthCtrl --> UserModel[User Model]
+        
+        EventModel --> OrderModel[Orders & Order Items]
+        OrderModel --> PaymentModel[Payments State Machine]
+        OrderModel --> TicketModel[Issued Tickets & Unique Barcodes]
+    end
 
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+    CoreDomain --> Database[(SQLite / MySQL Database)]
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+---
 
-## Contributing
+## ✨ Key Capabilities
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+- **🎪 Comprehensive Event Lifecycle**: Support for upcoming events, slug-based SEO-friendly routing, venue management, and event banners.
+- **🏷️ Multi-Tier Ticket Pricing**: Define multiple ticket categories per event (e.g. VIP, Early Bird, Regular) with distinct pricing and automated quota tracking.
+- **🔐 Token-Based Authentication**: Secure authentication using Laravel Sanctum for API tokens with built-in role verification (`admin` vs `customer`).
+- **🛡️ Request Validation & Resources**: Strict form request validation rules with normalized, consistent JSON responses via API Resources.
+- **🧪 Comprehensive Test Suite**: 500+ lines of robust automated feature tests using **Pest PHP**.
 
-## Code of Conduct
+---
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## 📡 API Reference Overview
 
-## Security Vulnerabilities
+### 1. Authentication Endpoints
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :---: | :--- |
+| `POST` | `/api/register` | Public | Register new customer account |
+| `POST` | `/api/login` | Public | Authenticate user and issue Sanctum token |
+| `POST` | `/api/logout` | Authenticated | Revoke active token session |
+| `GET` | `/api/me` | Authenticated | Fetch authenticated user profile |
 
-## License
+### 2. Public Event Catalog
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :---: | :--- |
+| `GET` | `/api/events` | Public | List all active events with pricing & date filters |
+| `GET` | `/api/events/{slug}` | Public | Get detailed event info with ticket tiers and remaining quotas |
+
+### 3. Admin Backoffice Management (`role:admin`)
+
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :---: | :--- |
+| `GET` | `/api/admin/events` | Admin | List all events (including drafts and archived) |
+| `POST` | `/api/admin/events` | Admin | Create a new event with venue & banner |
+| `GET` | `/api/admin/events/{id}` | Admin | Retrieve single event detail |
+| `PUT` | `/api/admin/events/{id}` | Admin | Update event details |
+| `DELETE` | `/api/admin/events/{id}` | Admin | Delete event |
+| `GET` | `/api/admin/ticket-types` | Admin | List all ticket types |
+| `POST` | `/api/admin/ticket-types` | Admin | Create new ticket tier for an event |
+| `PUT` | `/api/admin/ticket-types/{id}` | Admin | Update price or quota for ticket tier |
+| `DELETE` | `/api/admin/ticket-types/{id}` | Admin | Remove ticket tier |
+
+---
+
+## 🗄️ Database Entity Schema
+
+```mermaid
+erDiagram
+    USERS ||--o{ ORDERS : places
+    EVENTS ||--|{ TICKET_TYPES : contains
+    TICKET_TYPES ||--o{ ORDER_ITEMS : includes
+    ORDERS ||--|{ ORDER_ITEMS : contains
+    ORDERS ||--|| PAYMENTS : processes
+    ORDER_ITEMS ||--|{ TICKETS : generates
+
+    USERS {
+        bigint id PK
+        string name
+        string email
+        string password
+        enum role "admin, customer"
+        timestamp email_verified_at
+    }
+
+    EVENTS {
+        bigint id PK
+        string title
+        string slug UK
+        text description
+        string venue
+        timestamp start_at
+        string banner
+        enum status "draft, published, cancelled"
+    }
+
+    TICKET_TYPES {
+        bigint id PK
+        bigint event_id FK
+        string name "VIP, Regular, Early Bird"
+        decimal price
+        integer quota
+        integer sold
+    }
+
+    ORDERS {
+        bigint id PK
+        bigint user_id FK
+        string order_number UK
+        decimal total_amount
+        enum status "pending, paid, expired, cancelled"
+    }
+
+    PAYMENTS {
+        bigint id PK
+        bigint order_id FK
+        string payment_type "midtrans, transfer"
+        string transaction_id
+        decimal amount
+        enum status
+    }
+
+    TICKETS {
+        bigint id PK
+        bigint order_item_id FK
+        string ticket_code UK
+        enum status "valid, used, refunded"
+    }
+```
+
+---
+
+## 🚀 Quick Start (Local Setup)
+
+### Prerequisites
+* [PHP](https://www.php.net) (v8.3 or newer)
+* [Composer](https://getcomposer.org)
+* SQLite or MySQL
+
+### 1. Configure Environment
+Copy `.env.example` to create `.env`:
+```bash
+cp .env.example .env
+```
+
+### 2. Install Dependencies
+```bash
+composer install
+```
+
+### 3. Generate App Key & Run Migrations
+```bash
+php artisan key:generate
+php artisan migrate --seed
+```
+*The database will be migrated and seeded with initial demo events, ticket types, and user accounts.*
+
+### 4. Start Development Server
+```bash
+php artisan serve
+```
+*API will run at `http://localhost:8000`.*
+
+---
+
+## 🧪 Automated Testing
+
+Execute the test suite powered by Pest PHP:
+```bash
+php artisan test
+```
+
+---
+
+## 📄 License
+
+This software is open-sourced under the [MIT License](LICENSE).
