@@ -557,3 +557,211 @@ test('DELETE /api/admin/ticket-types/{ticket_type} fails with 422 if orders exis
     $response->assertStatus(422)
         ->assertJsonPath('message', 'Jenis tiket sudah pernah dipesan sehingga tidak bisa dihapus');
 });
+
+// -------------------------------------------------------------
+// 5. Checkout & Order Endpoints (P5)
+// -------------------------------------------------------------
+
+test('POST /api/checkout creates order with pending status and increments sold', function () {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    $event = Event::create([
+        'title' => 'Checkout Event',
+        'slug' => 'checkout-event',
+        'description' => 'Desc',
+        'venue' => 'Venue',
+        'start_at' => now()->addDays(5),
+        'status' => 'published',
+    ]);
+
+    $ticketType = TicketType::create([
+        'event_id' => $event->id,
+        'name' => 'Front Row',
+        'price' => 150000,
+        'quota' => 5,
+        'sold' => 0,
+    ]);
+
+    $response = $this->actingAs($user, 'sanctum')->postJson('/api/checkout', [
+        'items' => [
+            ['ticket_type_id' => $ticketType->id, 'qty' => 3],
+        ],
+    ]);
+
+    $response->assertStatus(201)
+        ->assertJsonPath('data.status', 'pending')
+        ->assertJsonPath('data.total', 450000)
+        ->assertJsonPath('data.items.0.qty', 3)
+        ->assertJsonPath('data.items.0.price', 150000)
+        ->assertJsonPath('data.items.0.subtotal', 450000);
+
+    expect($ticketType->fresh()->sold)->toBe(3);
+    expect($ticketType->fresh()->remaining)->toBe(2);
+});
+
+test('POST /api/checkout fails with 422 if quota is exceeded', function () {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    $event = Event::create([
+        'title' => 'Quota Event',
+        'slug' => 'quota-event',
+        'description' => 'Desc',
+        'venue' => 'Venue',
+        'start_at' => now()->addDays(5),
+        'status' => 'published',
+    ]);
+
+    $ticketType = TicketType::create([
+        'event_id' => $event->id,
+        'name' => 'Front Row',
+        'price' => 150000,
+        'quota' => 5,
+        'sold' => 3,
+    ]);
+
+    $response = $this->actingAs($user, 'sanctum')->postJson('/api/checkout', [
+        'items' => [
+            ['ticket_type_id' => $ticketType->id, 'qty' => 3],
+        ],
+    ]);
+
+    $response->assertStatus(422)
+        ->assertJsonValidationErrors(['items']);
+
+    expect($ticketType->fresh()->sold)->toBe(3);
+});
+
+test('POST /api/checkout fails with 422 if duplicate ticket_type_id is provided', function () {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    $event = Event::create([
+        'title' => 'Duplicate Item Event',
+        'slug' => 'duplicate-item-event',
+        'description' => 'Desc',
+        'venue' => 'Venue',
+        'start_at' => now()->addDays(5),
+        'status' => 'published',
+    ]);
+
+    $ticketType = TicketType::create([
+        'event_id' => $event->id,
+        'name' => 'General',
+        'price' => 50000,
+        'quota' => 20,
+        'sold' => 0,
+    ]);
+
+    $response = $this->actingAs($user, 'sanctum')->postJson('/api/checkout', [
+        'items' => [
+            ['ticket_type_id' => $ticketType->id, 'qty' => 1],
+            ['ticket_type_id' => $ticketType->id, 'qty' => 2],
+        ],
+    ]);
+
+    $response->assertStatus(422)
+        ->assertJsonValidationErrors(['items.0.ticket_type_id', 'items.1.ticket_type_id']);
+});
+
+test('POST /api/checkout fails with 422 if event is not published', function () {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    $event = Event::create([
+        'title' => 'Draft Event',
+        'slug' => 'draft-event',
+        'description' => 'Desc',
+        'venue' => 'Venue',
+        'start_at' => now()->addDays(5),
+        'status' => 'draft',
+    ]);
+
+    $ticketType = TicketType::create([
+        'event_id' => $event->id,
+        'name' => 'Tiket Umum',
+        'price' => 50000,
+        'quota' => 20,
+        'sold' => 0,
+    ]);
+
+    $response = $this->actingAs($user, 'sanctum')->postJson('/api/checkout', [
+        'items' => [
+            ['ticket_type_id' => $ticketType->id, 'qty' => 1],
+        ],
+    ]);
+
+    $response->assertStatus(422)
+        ->assertJsonValidationErrors(['items']);
+});
+
+test('GET /api/orders returns user orders history', function () {
+    $user = User::factory()->create(['role' => 'customer']);
+    $otherUser = User::factory()->create(['role' => 'customer']);
+
+    $event = Event::create([
+        'title' => 'Order List Event',
+        'slug' => 'order-list-event',
+        'description' => 'Desc',
+        'venue' => 'Venue',
+        'start_at' => now()->addDays(5),
+        'status' => 'published',
+    ]);
+
+    $ticketType = TicketType::create([
+        'event_id' => $event->id,
+        'name' => 'Regular',
+        'price' => 100000,
+        'quota' => 50,
+        'sold' => 2,
+    ]);
+
+    $order1 = Order::create([
+        'user_id' => $user->id,
+        'order_code' => 'INV-USER-1',
+        'total' => 100000,
+        'status' => 'pending',
+        'expires_at' => now()->addMinutes(30),
+    ]);
+    OrderItem::create([
+        'order_id' => $order1->id,
+        'ticket_type_id' => $ticketType->id,
+        'qty' => 1,
+        'price' => 100000,
+    ]);
+
+    // Order milik user lain
+    $order2 = Order::create([
+        'user_id' => $otherUser->id,
+        'order_code' => 'INV-OTHER-1',
+        'total' => 100000,
+        'status' => 'pending',
+        'expires_at' => now()->addMinutes(30),
+    ]);
+
+    $response = $this->actingAs($user, 'sanctum')->getJson('/api/orders');
+
+    $response->assertStatus(200)
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.order_code', 'INV-USER-1');
+});
+
+test('GET /api/orders/{order} returns order detail for owner and 404 for other customer', function () {
+    $user = User::factory()->create(['role' => 'customer']);
+    $otherUser = User::factory()->create(['role' => 'customer']);
+
+    $order = Order::create([
+        'user_id' => $user->id,
+        'order_code' => 'INV-DETAIL-1',
+        'total' => 200000,
+        'status' => 'pending',
+        'expires_at' => now()->addMinutes(30),
+    ]);
+
+    // Akses oleh pemilik: 200
+    $response = $this->actingAs($user, 'sanctum')->getJson("/api/orders/{$order->order_code}");
+    $response->assertStatus(200)
+        ->assertJsonPath('data.order_code', 'INV-DETAIL-1');
+
+    // Akses oleh user lain: 404
+    $otherResponse = $this->actingAs($otherUser, 'sanctum')->getJson("/api/orders/{$order->order_code}");
+    $otherResponse->assertStatus(404);
+});
+

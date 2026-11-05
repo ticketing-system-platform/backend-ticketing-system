@@ -25,7 +25,7 @@ class OrderItem extends Model
         return $this->hasMany(Ticket::class);
     }
 
-    public function subTotal(): int
+    public function subtotal(): int
     {
         return $this->price * $this->qty;
     }

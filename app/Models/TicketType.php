@@ -35,10 +35,13 @@ class TicketType extends Model
         return $this->hasMany(OrderItem::class);
     }
 
-    protected function remaining(): Attribute
+    public function remaining(): int
     {
-        return Attribute::make(
-            get: fn () => max(0, $this->quota - $this->sold),
-        );
+        return max(0, $this->quota - $this->sold);
+    }
+
+    public function getRemainingAttribute(): int
+    {
+        return $this->remaining();
     }
 }
