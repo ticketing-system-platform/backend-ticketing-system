@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * Logika bisnis order: checkout, menerima notifikasi pembayaran,
@@ -15,6 +16,8 @@ use Illuminate\Validation\ValidationException;
  */
 class OrderService
 {
+    public function __construct(private MidtransService $midtrans) {}
+
     /**
      * Buat order baru + tahan kuota tiket.
      *
@@ -22,7 +25,7 @@ class OrderService
      */
     public function checkout(User $user, array $items): Order
     {
-        return DB::transaction(function () use ($user, $items) {
+        $order = DB::transaction(function () use ($user, $items) {
             $total = 0;
             $lines = [];
 
@@ -63,12 +66,30 @@ class OrderService
                 'order_code' => $this->generateOrderCode(),
                 'total' => $total,
                 'status' => 'pending',
-                'expires_at' => now()->addMinutes(30),
+                'expires_at' => now()->addMinutes(config('midtrans.expiry_minutes')),
             ]);
             $order->items()->createMany($lines);
 
             return $order;
         });
+
+        // Snap token diminta DI LUAR transaksi supaya lock database
+        // tidak tertahan selama menunggu respons HTTP dari Midtrans.
+        try {
+            $order->update(['snap_token' => $this->midtrans->createSnapToken($order)]);
+        } catch (Throwable $e) {
+            report($e); // catat ke storage/logs/laravel.log
+
+            // Gagal menghubungi Midtrans: batalkan order & kembalikan kuota
+            DB::transaction(function () use ($order) {
+                $order->update(['status' => 'failed']);
+                $order->releaseQuota();
+            });
+
+            abort(502, 'Gagal terhubung ke Midtrans. Silakan coba lagi.');
+        }
+
+        return $order;
     }
 
     private function generateOrderCode(): string

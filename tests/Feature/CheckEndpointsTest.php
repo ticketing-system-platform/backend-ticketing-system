@@ -563,6 +563,10 @@ test('DELETE /api/admin/ticket-types/{ticket_type} fails with 422 if orders exis
 // -------------------------------------------------------------
 
 test('POST /api/checkout creates order with pending status and increments sold', function () {
+    $this->mock(\App\Services\MidtransService::class, function ($mock) {
+        $mock->shouldReceive('createSnapToken')->once()->andReturn('mock-snap-token-123');
+    });
+
     $user = User::factory()->create(['role' => 'customer']);
 
     $event = Event::create([
@@ -590,6 +594,7 @@ test('POST /api/checkout creates order with pending status and increments sold',
 
     $response->assertStatus(201)
         ->assertJsonPath('data.status', 'pending')
+        ->assertJsonPath('data.snap_token', 'mock-snap-token-123')
         ->assertJsonPath('data.total', 450000)
         ->assertJsonPath('data.items.0.qty', 3)
         ->assertJsonPath('data.items.0.price', 150000)
@@ -597,6 +602,43 @@ test('POST /api/checkout creates order with pending status and increments sold',
 
     expect($ticketType->fresh()->sold)->toBe(3);
     expect($ticketType->fresh()->remaining)->toBe(2);
+});
+
+test('POST /api/checkout releases quota and fails order if Midtrans fails', function () {
+    $this->mock(\App\Services\MidtransService::class, function ($mock) {
+        $mock->shouldReceive('createSnapToken')->once()->andThrow(new \Exception('Midtrans connection timeout'));
+    });
+
+    $user = User::factory()->create(['role' => 'customer']);
+
+    $event = Event::create([
+        'title' => 'Checkout Event Fail',
+        'slug' => 'checkout-event-fail',
+        'description' => 'Desc',
+        'venue' => 'Venue',
+        'start_at' => now()->addDays(5),
+        'status' => 'published',
+    ]);
+
+    $ticketType = TicketType::create([
+        'event_id' => $event->id,
+        'name' => 'VIP',
+        'price' => 200000,
+        'quota' => 10,
+        'sold' => 2,
+    ]);
+
+    $response = $this->actingAs($user, 'sanctum')->postJson('/api/checkout', [
+        'items' => [
+            ['ticket_type_id' => $ticketType->id, 'qty' => 3],
+        ],
+    ]);
+
+    $response->assertStatus(502);
+
+    expect($ticketType->fresh()->sold)->toBe(2);
+    $order = Order::latest('id')->first();
+    expect($order->status)->toBe('failed');
 });
 
 test('POST /api/checkout fails with 422 if quota is exceeded', function () {
