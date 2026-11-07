@@ -1,12 +1,16 @@
 <?php
 
+use App\Mail\OrderExpiredMail;
+use App\Mail\PaymentSuccessMail;
 use App\Models\Event;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\TicketType;
 use App\Models\User;
+use App\Services\OrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
 uses(RefreshDatabase::class);
@@ -806,4 +810,228 @@ test('GET /api/orders/{order} returns order detail for owner and 404 for other c
     $otherResponse = $this->actingAs($otherUser, 'sanctum')->getJson("/api/orders/{$order->order_code}");
     $otherResponse->assertStatus(404);
 });
+
+// -------------------------------------------------------------
+// 6. Midtrans Webhook & Ticket Issuance (P7)
+// -------------------------------------------------------------
+
+test('POST /api/midtrans/notification rejects invalid signature with 403', function () {
+    config(['midtrans.server_key' => 'SB-Mid-server-testkey']);
+
+    $response = $this->postJson('/api/midtrans/notification', [
+        'order_id' => 'INV-TEST-001',
+        'status_code' => '200',
+        'gross_amount' => '100000.00',
+        'signature_key' => 'invalid-signature-hash',
+    ]);
+
+    $response->assertStatus(403)
+        ->assertJson(['message' => 'Signature tidak valid.']);
+});
+
+test('POST /api/midtrans/notification processes settlement and issues tickets and sends email', function () {
+    Mail::fake();
+    config(['midtrans.server_key' => 'SB-Mid-server-testkey']);
+
+    $user = User::factory()->create(['role' => 'customer']);
+
+    $event = Event::create([
+        'title' => 'Concert P7',
+        'slug' => 'concert-p7',
+        'description' => 'Desc',
+        'venue' => 'Venue',
+        'start_at' => now()->addDays(5),
+        'status' => 'published',
+    ]);
+
+    $ticketType = TicketType::create([
+        'event_id' => $event->id,
+        'name' => 'VIP',
+        'price' => 100000,
+        'quota' => 20,
+        'sold' => 2,
+    ]);
+
+    $order = Order::create([
+        'user_id' => $user->id,
+        'order_code' => 'INV-P7-SUCCESS',
+        'total' => 200000,
+        'status' => 'pending',
+        'expires_at' => now()->addMinutes(30),
+    ]);
+
+    OrderItem::create([
+        'order_id' => $order->id,
+        'ticket_type_id' => $ticketType->id,
+        'qty' => 2,
+        'price' => 100000,
+    ]);
+
+    $orderId = 'INV-P7-SUCCESS';
+    $statusCode = '200';
+    $grossAmount = '200000.00';
+    $validSignature = hash('sha512', $orderId.$statusCode.$grossAmount.'SB-Mid-server-testkey');
+
+    $payload = [
+        'order_id' => $orderId,
+        'status_code' => $statusCode,
+        'gross_amount' => $grossAmount,
+        'signature_key' => $validSignature,
+        'transaction_id' => 'trx-12345',
+        'payment_type' => 'bank_transfer',
+        'transaction_status' => 'settlement',
+    ];
+
+    $response = $this->postJson('/api/midtrans/notification', $payload);
+
+    $response->assertStatus(200)
+        ->assertJson(['message' => 'OK']);
+
+    $order->refresh();
+    expect($order->status)->toBe('paid')
+        ->and($order->paid_at)->not->toBeNull();
+
+    // Pastikan 2 tiket terbit untuk qty=2
+    expect($order->tickets()->count())->toBe(2);
+    expect($order->tickets()->first()->code)->toStartWith('TKT-');
+
+    // Pastikan payment log tersimpan
+    $this->assertDatabaseHas('payments', [
+        'order_id' => $order->id,
+        'transaction_id' => 'trx-12345',
+        'transaction_status' => 'settlement',
+    ]);
+
+    Mail::assertQueued(PaymentSuccessMail::class, function ($mail) use ($order) {
+        return $mail->order->id === $order->id;
+    });
+
+    // Idempoten: kirim ulang notifikasi settlement yang sama
+    $secondResponse = $this->postJson('/api/midtrans/notification', $payload);
+    $secondResponse->assertStatus(200);
+
+    // Jumlah tiket dan email tidak boleh bertambah
+    expect($order->fresh()->tickets()->count())->toBe(2);
+    Mail::assertQueued(PaymentSuccessMail::class, 1);
+});
+
+test('POST /api/midtrans/notification processes expire, releases quota, and sends email', function () {
+    Mail::fake();
+    config(['midtrans.server_key' => 'SB-Mid-server-testkey']);
+
+    $user = User::factory()->create(['role' => 'customer']);
+
+    $event = Event::create([
+        'title' => 'Concert Expire',
+        'slug' => 'concert-expire',
+        'description' => 'Desc',
+        'venue' => 'Venue',
+        'start_at' => now()->addDays(5),
+        'status' => 'published',
+    ]);
+
+    $ticketType = TicketType::create([
+        'event_id' => $event->id,
+        'name' => 'Regular',
+        'price' => 50000,
+        'quota' => 10,
+        'sold' => 3,
+    ]);
+
+    $order = Order::create([
+        'user_id' => $user->id,
+        'order_code' => 'INV-P7-EXPIRE',
+        'total' => 150000,
+        'status' => 'pending',
+        'expires_at' => now()->addMinutes(30),
+    ]);
+
+    OrderItem::create([
+        'order_id' => $order->id,
+        'ticket_type_id' => $ticketType->id,
+        'qty' => 3,
+        'price' => 50000,
+    ]);
+
+    $orderId = 'INV-P7-EXPIRE';
+    $statusCode = '202';
+    $grossAmount = '150000.00';
+    $validSignature = hash('sha512', $orderId.$statusCode.$grossAmount.'SB-Mid-server-testkey');
+
+    $payload = [
+        'order_id' => $orderId,
+        'status_code' => $statusCode,
+        'gross_amount' => $grossAmount,
+        'signature_key' => $validSignature,
+        'transaction_id' => 'trx-expired',
+        'payment_type' => 'bank_transfer',
+        'transaction_status' => 'expire',
+    ];
+
+    $response = $this->postJson('/api/midtrans/notification', $payload);
+    $response->assertStatus(200);
+
+    $order->refresh();
+    expect($order->status)->toBe('expired');
+    expect($ticketType->fresh()->sold)->toBe(0);
+
+    Mail::assertQueued(OrderExpiredMail::class, function ($mail) use ($order) {
+        return $mail->order->id === $order->id;
+    });
+});
+
+test('expireOverdueOrders cancels orders past expires_at + 5 minutes', function () {
+    Mail::fake();
+
+    $user = User::factory()->create(['role' => 'customer']);
+
+    $event = Event::create([
+        'title' => 'Scheduler Event',
+        'slug' => 'scheduler-event',
+        'description' => 'Desc',
+        'venue' => 'Venue',
+        'start_at' => now()->addDays(5),
+        'status' => 'published',
+    ]);
+
+    $ticketType = TicketType::create([
+        'event_id' => $event->id,
+        'name' => 'Early Bird',
+        'price' => 50000,
+        'quota' => 10,
+        'sold' => 2,
+    ]);
+
+    $overdueOrder = Order::create([
+        'user_id' => $user->id,
+        'order_code' => 'INV-OVERDUE',
+        'total' => 100000,
+        'status' => 'pending',
+        'expires_at' => now()->subMinutes(6),
+    ]);
+
+    OrderItem::create([
+        'order_id' => $overdueOrder->id,
+        'ticket_type_id' => $ticketType->id,
+        'qty' => 2,
+        'price' => 50000,
+    ]);
+
+    $recentOrder = Order::create([
+        'user_id' => $user->id,
+        'order_code' => 'INV-RECENT',
+        'total' => 50000,
+        'status' => 'pending',
+        'expires_at' => now()->addMinutes(10),
+    ]);
+
+    $service = app(OrderService::class);
+    $expiredCount = $service->expireOverdueOrders();
+
+    expect($expiredCount)->toBe(1);
+    expect($overdueOrder->fresh()->status)->toBe('expired');
+    expect($recentOrder->fresh()->status)->toBe('pending');
+    expect($ticketType->fresh()->sold)->toBe(0);
+});
+
 

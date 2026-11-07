@@ -98,6 +98,20 @@ flowchart TD
 | `PUT` | `/api/admin/ticket-types/{id}` | Admin | Update price or quota for ticket tier |
 | `DELETE` | `/api/admin/ticket-types/{id}` | Admin | Remove ticket tier |
 
+### 4. Customer Orders & Checkout
+
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :---: | :--- |
+| `POST` | `/api/checkout` | Authenticated | Create order with pessimistic lock & generate Midtrans Snap token |
+| `GET` | `/api/orders` | Authenticated | Get customer order history |
+| `GET` | `/api/orders/{order_code}` | Authenticated | Get customer order details and ticket barcodes |
+
+### 5. Webhook Payments (Midtrans)
+
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :---: | :--- |
+| `POST` | `/api/midtrans/notification` | Public (SHA512 Signature) | Midtrans webhook notification: marks paid, issues tickets, queues emails |
+
 ---
 
 ## 🗄️ Database Entity Schema

@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\TicketTypeController as AdminTicketTypeController
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\EventController;
+use App\Http\Controllers\MidtransNotificationController;
 use App\Http\Controllers\OrderController;
 use Illuminate\Support\Facades\Route;
 
@@ -14,6 +15,9 @@ Route::get('/events/{slug}', [EventController::class, 'show']);
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+
+// Webhook Midtrans: dipanggil server Midtrans, keamanannya lewat signature_key
+Route::post('/midtrans/notification', MidtransNotificationController::class);
 
 // Wajib login
 Route::middleware('auth:sanctum')->group(function () {
