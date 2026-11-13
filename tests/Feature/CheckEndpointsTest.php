@@ -1034,4 +1034,128 @@ test('expireOverdueOrders cancels orders past expires_at + 5 minutes', function 
     expect($ticketType->fresh()->sold)->toBe(0);
 });
 
+// -------------------------------------------------------------
+// 7. My Tickets & Expire Console Commands (P8)
+// -------------------------------------------------------------
+
+test('GET /api/my-tickets returns only paid tickets of current user', function () {
+    $user = User::factory()->create(['role' => 'customer']);
+    $otherUser = User::factory()->create(['role' => 'customer']);
+
+    $event = Event::create([
+        'title' => 'My Tickets Event',
+        'slug' => 'my-tickets-event',
+        'description' => 'Desc',
+        'venue' => 'Gelora Bung Karno',
+        'start_at' => now()->addDays(5),
+        'status' => 'published',
+    ]);
+
+    $ticketType = TicketType::create([
+        'event_id' => $event->id,
+        'name' => 'VIP Gold',
+        'price' => 250000,
+        'quota' => 20,
+        'sold' => 2,
+    ]);
+
+    // Order 1: Paid order milik user
+    $paidOrder = Order::create([
+        'user_id' => $user->id,
+        'order_code' => 'INV-USER-PAID',
+        'total' => 250000,
+        'status' => 'paid',
+        'paid_at' => now(),
+        'expires_at' => now()->addMinutes(30),
+    ]);
+    $item1 = OrderItem::create([
+        'order_id' => $paidOrder->id,
+        'ticket_type_id' => $ticketType->id,
+        'qty' => 1,
+        'price' => 250000,
+    ]);
+    $item1->tickets()->create([
+        'code' => 'TKT-USER-VIP1',
+    ]);
+
+    // Order 2: Pending order milik user (tiket tidak boleh muncul sebelum lunas)
+    $pendingOrder = Order::create([
+        'user_id' => $user->id,
+        'order_code' => 'INV-USER-PENDING',
+        'total' => 250000,
+        'status' => 'pending',
+        'expires_at' => now()->addMinutes(30),
+    ]);
+    $item2 = OrderItem::create([
+        'order_id' => $pendingOrder->id,
+        'ticket_type_id' => $ticketType->id,
+        'qty' => 1,
+        'price' => 250000,
+    ]);
+    $item2->tickets()->create([
+        'code' => 'TKT-USER-PENDING1',
+    ]);
+
+    // Order 3: Paid order milik other user
+    $otherOrder = Order::create([
+        'user_id' => $otherUser->id,
+        'order_code' => 'INV-OTHER-PAID',
+        'total' => 250000,
+        'status' => 'paid',
+        'paid_at' => now(),
+        'expires_at' => now()->addMinutes(30),
+    ]);
+    $item3 = OrderItem::create([
+        'order_id' => $otherOrder->id,
+        'ticket_type_id' => $ticketType->id,
+        'qty' => 1,
+        'price' => 250000,
+    ]);
+    $item3->tickets()->create([
+        'code' => 'TKT-OTHER-VIP1',
+    ]);
+
+    $response = $this->actingAs($user, 'sanctum')->getJson('/api/my-tickets');
+
+    $response->assertStatus(200)
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.code', 'TKT-USER-VIP1')
+        ->assertJsonPath('data.0.ticket_type', 'VIP Gold')
+        ->assertJsonPath('data.0.order_code', 'INV-USER-PAID')
+        ->assertJsonPath('data.0.holder_name', $user->name)
+        ->assertJsonPath('data.0.event.title', 'My Tickets Event');
+});
+
+test('Artisan orders:expire command runs successfully', function () {
+    $this->artisan('orders:expire')
+        ->expectsOutputToContain('order ditandai expired.')
+        ->assertExitCode(0);
+});
+
+test('Artisan midtrans:simulate command simulates webhook notification', function () {
+    \Illuminate\Support\Facades\Http::fake([
+        '*/api/midtrans/notification' => \Illuminate\Support\Facades\Http::response(['message' => 'OK'], 200),
+    ]);
+
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::create([
+        'user_id' => $user->id,
+        'order_code' => 'INV-SIMULATE-001',
+        'total' => 150000,
+        'status' => 'pending',
+        'expires_at' => now()->addMinutes(30),
+    ]);
+
+    $this->artisan('midtrans:simulate', [
+        'order_code' => $order->order_code,
+        'status' => 'settlement',
+    ])->assertExitCode(0);
+
+    \Illuminate\Support\Facades\Http::assertSent(function ($request) use ($order) {
+        return $request['order_id'] === $order->order_code
+            && $request['transaction_status'] === 'settlement'
+            && !empty($request['signature_key']);
+    });
+});
+
 

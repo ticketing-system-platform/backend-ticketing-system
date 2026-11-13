@@ -98,19 +98,25 @@ flowchart TD
 | `PUT` | `/api/admin/ticket-types/{id}` | Admin | Update price or quota for ticket tier |
 | `DELETE` | `/api/admin/ticket-types/{id}` | Admin | Remove ticket tier |
 
-### 4. Customer Orders & Checkout
+### 4. Customer Orders, Checkout & Tickets
 
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :---: | :--- |
 | `POST` | `/api/checkout` | Authenticated | Create order with pessimistic lock & generate Midtrans Snap token |
 | `GET` | `/api/orders` | Authenticated | Get customer order history |
 | `GET` | `/api/orders/{order_code}` | Authenticated | Get customer order details and ticket barcodes |
+| `GET` | `/api/my-tickets` | Authenticated | Get paid tickets with QR payload, event details, and check-in status |
 
 ### 5. Webhook Payments (Midtrans)
 
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :---: | :--- |
 | `POST` | `/api/midtrans/notification` | Public (SHA512 Signature) | Midtrans webhook notification: marks paid, issues tickets, queues emails |
+
+### 6. Scheduled & Simulation Commands
+
+- `php artisan orders:expire`: Automatically cancel overdue pending orders (> 5 min past expiration) and release ticket quotas.
+- `php artisan midtrans:simulate {order_code} {status}`: Local development command to simulate valid signed Midtrans webhook notifications.
 
 ---
 
