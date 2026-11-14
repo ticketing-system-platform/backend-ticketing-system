@@ -1158,4 +1158,204 @@ test('Artisan midtrans:simulate command simulates webhook notification', functio
     });
 });
 
+// -------------------------------------------------------------
+// 8. Admin Checkin, Orders, & Stats Endpoints (P9)
+// -------------------------------------------------------------
+
+test('POST /api/admin/checkin performs ticket check-in with validation', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $customer = User::factory()->create(['role' => 'customer']);
+
+    $event = Event::create([
+        'title' => 'Festival P9',
+        'slug' => 'festival-p9',
+        'description' => 'Desc',
+        'venue' => 'Stadion Utama',
+        'start_at' => now()->addDays(2),
+        'status' => 'published',
+    ]);
+
+    $ticketType = TicketType::create([
+        'event_id' => $event->id,
+        'name' => 'Festival Regular',
+        'price' => 75000,
+        'quota' => 50,
+        'sold' => 2,
+    ]);
+
+    // Paid Order
+    $paidOrder = Order::create([
+        'user_id' => $customer->id,
+        'order_code' => 'INV-CHECKIN-PAID',
+        'total' => 75000,
+        'status' => 'paid',
+        'paid_at' => now(),
+        'expires_at' => now()->addMinutes(30),
+    ]);
+    $itemPaid = OrderItem::create([
+        'order_id' => $paidOrder->id,
+        'ticket_type_id' => $ticketType->id,
+        'qty' => 1,
+        'price' => 75000,
+    ]);
+    $ticket = $itemPaid->tickets()->create(['code' => 'TKT-VALID-001']);
+
+    // Unpaid Order
+    $pendingOrder = Order::create([
+        'user_id' => $customer->id,
+        'order_code' => 'INV-CHECKIN-PENDING',
+        'total' => 75000,
+        'status' => 'pending',
+        'expires_at' => now()->addMinutes(30),
+    ]);
+    $itemPending = OrderItem::create([
+        'order_id' => $pendingOrder->id,
+        'ticket_type_id' => $ticketType->id,
+        'qty' => 1,
+        'price' => 75000,
+    ]);
+    $itemPending->tickets()->create(['code' => 'TKT-UNPAID-002']);
+
+    // 1. Customer cannot check in
+    $this->actingAs($customer, 'sanctum')->postJson('/api/admin/checkin', ['code' => 'TKT-VALID-001'])
+        ->assertStatus(403);
+
+    // 2. Ticket not found
+    $this->actingAs($admin, 'sanctum')->postJson('/api/admin/checkin', ['code' => 'TKT-NOTFOUND'])
+        ->assertStatus(404)
+        ->assertJson(['message' => 'Tiket tidak ditemukan.']);
+
+    // 3. Unpaid order
+    $this->actingAs($admin, 'sanctum')->postJson('/api/admin/checkin', ['code' => 'TKT-UNPAID-002'])
+        ->assertStatus(422)
+        ->assertJson(['message' => 'Order tiket ini belum lunas.']);
+
+    // 4. Successful check-in
+    $response = $this->actingAs($admin, 'sanctum')->postJson('/api/admin/checkin', ['code' => 'TKT-VALID-001']);
+    $response->assertStatus(200)
+        ->assertJsonPath('data.code', 'TKT-VALID-001')
+        ->assertJsonPath('message', 'Check-in berhasil.');
+
+    expect($ticket->fresh()->checked_in_at)->not->toBeNull();
+
+    // 5. Already checked in
+    $repeatResponse = $this->actingAs($admin, 'sanctum')->postJson('/api/admin/checkin', ['code' => 'TKT-VALID-001']);
+    $repeatResponse->assertStatus(422)
+        ->assertJsonPath('data.code', 'TKT-VALID-001')
+        ->assertJsonStructure(['message', 'data']);
+});
+
+test('GET /api/admin/orders lists paginated orders with status filter and search', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $user1 = User::factory()->create(['name' => 'Budi Santoso', 'email' => 'budi@example.com']);
+    $user2 = User::factory()->create(['name' => 'Siti Rahma', 'email' => 'siti@example.com']);
+
+    $event = Event::create([
+        'title' => 'Expo P9',
+        'slug' => 'expo-p9',
+        'description' => 'Desc',
+        'venue' => 'JCC Senayan',
+        'start_at' => now()->addDays(3),
+        'status' => 'published',
+    ]);
+
+    $ticketType = TicketType::create([
+        'event_id' => $event->id,
+        'name' => 'Reguler',
+        'price' => 50000,
+        'quota' => 100,
+        'sold' => 2,
+    ]);
+
+    $order1 = Order::create([
+        'user_id' => $user1->id,
+        'order_code' => 'INV-BUDI-100',
+        'total' => 50000,
+        'status' => 'paid',
+        'paid_at' => now(),
+        'expires_at' => now()->addMinutes(30),
+    ]);
+    OrderItem::create([
+        'order_id' => $order1->id,
+        'ticket_type_id' => $ticketType->id,
+        'qty' => 1,
+        'price' => 50000,
+    ]);
+
+    $order2 = Order::create([
+        'user_id' => $user2->id,
+        'order_code' => 'INV-SITI-200',
+        'total' => 50000,
+        'status' => 'pending',
+        'expires_at' => now()->addMinutes(30),
+    ]);
+    OrderItem::create([
+        'order_id' => $order2->id,
+        'ticket_type_id' => $ticketType->id,
+        'qty' => 1,
+        'price' => 50000,
+    ]);
+
+    // Filter status=paid
+    $this->actingAs($admin, 'sanctum')->getJson('/api/admin/orders?status=paid')
+        ->assertStatus(200)
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.order_code', 'INV-BUDI-100');
+
+    // Search keyword
+    $this->actingAs($admin, 'sanctum')->getJson('/api/admin/orders?search=budi')
+        ->assertStatus(200)
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.user.name', 'Budi Santoso');
+});
+
+test('GET /api/admin/stats returns summary metrics for dashboard', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $user = User::factory()->create();
+
+    $event = Event::create([
+        'title' => 'Stats Event',
+        'slug' => 'stats-event',
+        'description' => 'Desc',
+        'venue' => 'Hall A',
+        'start_at' => now()->addDays(1),
+        'status' => 'published',
+    ]);
+
+    $ticketType = TicketType::create([
+        'event_id' => $event->id,
+        'name' => 'VIP',
+        'price' => 100000,
+        'quota' => 10,
+        'sold' => 2,
+    ]);
+
+    $paidOrder = Order::create([
+        'user_id' => $user->id,
+        'order_code' => 'INV-STATS-PAID',
+        'total' => 200000,
+        'status' => 'paid',
+        'paid_at' => now(),
+        'expires_at' => now()->addMinutes(30),
+    ]);
+    $item = OrderItem::create([
+        'order_id' => $paidOrder->id,
+        'ticket_type_id' => $ticketType->id,
+        'qty' => 2,
+        'price' => 100000,
+    ]);
+    $item->tickets()->create(['code' => 'TKT-STATS-1', 'checked_in_at' => now()]);
+    $item->tickets()->create(['code' => 'TKT-STATS-2']);
+
+    $response = $this->actingAs($admin, 'sanctum')->getJson('/api/admin/stats');
+
+    $response->assertStatus(200)
+        ->assertJsonPath('data.revenue', 200000)
+        ->assertJsonPath('data.paid_orders', 1)
+        ->assertJsonPath('data.pending_orders', 0)
+        ->assertJsonPath('data.tickets_issued', 2)
+        ->assertJsonPath('data.tickets_checked_in', 1)
+        ->assertJsonStructure(['data' => ['events', 'recent_orders']]);
+});
+
 

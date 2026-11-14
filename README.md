@@ -97,6 +97,9 @@ flowchart TD
 | `POST` | `/api/admin/ticket-types` | Admin | Create new ticket tier for an event |
 | `PUT` | `/api/admin/ticket-types/{id}` | Admin | Update price or quota for ticket tier |
 | `DELETE` | `/api/admin/ticket-types/{id}` | Admin | Remove ticket tier |
+| `GET` | `/api/admin/orders` | Admin | Paginated orders with status filtering & search |
+| `POST` | `/api/admin/checkin` | Admin | Check-in customer ticket QR code at venue gate |
+| `GET` | `/api/admin/stats` | Admin | Dashboard summary (revenue, orders, tickets, check-in rate) |
 
 ### 4. Customer Orders, Checkout & Tickets
 
