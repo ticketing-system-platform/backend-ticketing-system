@@ -1158,6 +1158,30 @@ test('Artisan midtrans:simulate command simulates webhook notification', functio
     });
 });
 
+test('Artisan user:password command updates user password and revokes tokens', function () {
+    $user = User::factory()->create([
+        'email' => 'change-pass@test.com',
+        'password' => 'oldpassword123',
+    ]);
+    $user->createToken('test-token');
+
+    expect($user->tokens()->count())->toBe(1);
+
+    $this->artisan('user:password', ['email' => $user->email])
+        ->expectsQuestion("Password baru untuk {$user->email}", 'newsecretpassword')
+        ->expectsOutputToContain('Password berhasil diganti.')
+        ->assertExitCode(0);
+
+    $user->refresh();
+    expect(\Illuminate\Support\Facades\Hash::check('newsecretpassword', $user->password))->toBeTrue();
+    expect($user->tokens()->count())->toBe(0);
+
+    // Test non-existing user
+    $this->artisan('user:password', ['email' => 'notfound@test.com'])
+        ->expectsOutputToContain('Akun tidak ditemukan.')
+        ->assertExitCode(1);
+});
+
 // -------------------------------------------------------------
 // 8. Admin Checkin, Orders, & Stats Endpoints (P9)
 // -------------------------------------------------------------

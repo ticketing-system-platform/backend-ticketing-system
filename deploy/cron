@@ -1,0 +1,8 @@
+# Scheduler Laravel: setiap menit menjalankan jadwal di routes/console.php
+# (orders:expire = batalkan order pending yang lewat batas waktu bayar).
+#
+# Pasang di VPS:
+#   sudo cp deploy/cron /etc/cron.d/tiket-event
+#
+# menit jam tgl bln hari  user      perintah
+*       *   *   *   *     www-data  cd /var/www/tiket-event/backend && php artisan schedule:run >> /dev/null 2>&1
