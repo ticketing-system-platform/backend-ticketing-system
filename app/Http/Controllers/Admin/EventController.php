@@ -61,14 +61,14 @@ class EventController extends Controller
     {
         if ($event->ticketTypes()->whereHas('orderItems')->exists()) {
             return response()->json([
-                'message' => 'Event sudah memiliki transaksi sehingga tidak bisa dihapus, ubah status menjadi draft',
+                'message' => 'Event sudah memiliki transaksi sehingga tidak bisa dihapus. Ubah status menjadi draft.',
             ], 422);
         }
 
         $this->deleteBanner($event);
         $event->delete();
 
-        return response()->json(['message' => 'Event Berhasil dihapus']);
+        return response()->json(['message' => 'Event berhasil dihapus.']);
     }
 
     private function uniqueSlug(string $title): string

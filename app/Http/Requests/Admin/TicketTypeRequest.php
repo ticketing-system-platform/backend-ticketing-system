@@ -47,17 +47,11 @@ class TicketTypeRequest extends FormRequest
             function (Validator $validator) {
                 $ticketType = $this->route('ticket_type');
 
-                if (is_numeric($ticketType)) {
-                    $ticketType = TicketType::find($ticketType);
-                }
-
-                if ($ticketType instanceof TicketType && $this->filled('quota')) {
-                    if ((int) $this->input('quota') < $ticketType->sold) {
-                        $validator->errors()->add(
-                            'quota',
-                            "Kuota tidak boleh kurang dari tiket yang sudah terjual ({$ticketType->sold})"
-                        );
-                    }
+                if ($ticketType && (int) $this->input('quota') < $ticketType->sold) {
+                    $validator->errors()->add(
+                        'quota',
+                        "Kuota tidak boleh kurang dari tiket yang sudah terjual ({$ticketType->sold})."
+                    );
                 }
             },
         ];

@@ -25,13 +25,14 @@ class AuthController extends Controller
             ->setStatusCode(201);
     }
 
+    // POST /api/login
     public function login(LoginRequest $request)
     {
         $user = User::where('email', $request->email)->first();
 
         if (! $user || ! Hash::check($request->password, $user->password)) {
             throw ValidationException::withMessages([
-                'email' => 'Email atau password salah',
+                'email' => 'Email atau password salah.',
             ]);
         }
 
@@ -40,11 +41,13 @@ class AuthController extends Controller
         return (new UserResource($user))->additional(['token' => $token]);
     }
 
+    // POST /api/logout
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()?->delete();
+        // Hapus token yang sedang dipakai saja (perangkat lain tetap login)
+        $request->user()->currentAccessToken()->delete();
 
-        return response()->json(['message' => 'Berhasil logout']);
+        return response()->json(['message' => 'Berhasil logout.']);
     }
 
     public function me(Request $request)

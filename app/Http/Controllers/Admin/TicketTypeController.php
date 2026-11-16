@@ -39,16 +39,17 @@ class TicketTypeController extends Controller
         return new TicketTypeResource($ticketType);
     }
 
+    // DELETE /api/admin/ticket-types/{id}
     public function destroy(TicketType $ticketType)
     {
         if ($ticketType->orderItems()->exists()) {
             return response()->json([
-                'message' => 'Jenis tiket sudah pernah dipesan sehingga tidak bisa dihapus',
+                'message' => 'Jenis tiket sudah pernah dipesan sehingga tidak bisa dihapus.',
             ], 422);
         }
 
         $ticketType->delete();
 
-        return response()->json(['message' => 'jenis tiket berhasil dihapus']);
+        return response()->json(['message' => 'Jenis tiket berhasil dihapus.']);
     }
 }

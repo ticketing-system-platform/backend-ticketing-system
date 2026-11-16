@@ -78,7 +78,7 @@ test('POST /api/logout revokes token', function () {
         ->postJson('/api/logout');
 
     $response->assertStatus(200)
-        ->assertJson(['message' => 'Berhasil logout']);
+        ->assertJson(['message' => 'Berhasil logout.']);
 
     expect($user->tokens()->count())->toBe(0);
 });
@@ -311,7 +311,7 @@ test('DELETE /api/admin/events/{event} deletes event if no orders exist', functi
     $response = $this->actingAs($admin, 'sanctum')->deleteJson("/api/admin/events/{$event->id}");
 
     $response->assertStatus(200)
-        ->assertJson(['message' => 'Event Berhasil dihapus']);
+        ->assertJson(['message' => 'Event berhasil dihapus.']);
 
     $this->assertDatabaseMissing('events', ['id' => $event->id]);
 });
@@ -471,7 +471,7 @@ test('DELETE /api/admin/ticket-types/{ticket_type} deletes ticket type if no ord
     $response = $this->actingAs($admin, 'sanctum')->deleteJson("/api/admin/ticket-types/{$ticketType->id}");
 
     $response->assertStatus(200)
-        ->assertJson(['message' => 'jenis tiket berhasil dihapus']);
+        ->assertJson(['message' => 'Jenis tiket berhasil dihapus.']);
 
     $this->assertDatabaseMissing('ticket_types', ['id' => $ticketType->id]);
 });
@@ -516,7 +516,7 @@ test('DELETE /api/admin/events/{event} fails with 422 if orders exist', function
     $response = $this->actingAs($admin, 'sanctum')->deleteJson("/api/admin/events/{$event->id}");
 
     $response->assertStatus(422)
-        ->assertJsonPath('message', 'Event sudah memiliki transaksi sehingga tidak bisa dihapus, ubah status menjadi draft');
+        ->assertJsonPath('message', 'Event sudah memiliki transaksi sehingga tidak bisa dihapus. Ubah status menjadi draft.');
 });
 
 test('DELETE /api/admin/ticket-types/{ticket_type} fails with 422 if orders exist', function () {
@@ -559,7 +559,7 @@ test('DELETE /api/admin/ticket-types/{ticket_type} fails with 422 if orders exis
     $response = $this->actingAs($admin, 'sanctum')->deleteJson("/api/admin/ticket-types/{$ticketType->id}");
 
     $response->assertStatus(422)
-        ->assertJsonPath('message', 'Jenis tiket sudah pernah dipesan sehingga tidak bisa dihapus');
+        ->assertJsonPath('message', 'Jenis tiket sudah pernah dipesan sehingga tidak bisa dihapus.');
 });
 
 // -------------------------------------------------------------
