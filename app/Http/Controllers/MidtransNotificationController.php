@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\MidtransService;
 use App\Services\OrderService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class MidtransNotificationController extends Controller
 {
@@ -12,6 +13,9 @@ class MidtransNotificationController extends Controller
     public function __invoke(Request $request, MidtransService $midtrans, OrderService $orders)
     {
         $payload = $request->all();
+
+        //Rekan payload ke storage/logs/laravel.log
+        Log::info('Midtrans Notification Payload:', $payload);
 
         // 1. Tolak request yang bukan dari Midtrans
         if (! $midtrans->isValidSignature($payload)) {

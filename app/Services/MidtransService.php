@@ -70,14 +70,24 @@ class MidtransService
      */
     public function isValidSignature(array $payload): bool
     {
-        $expected = hash('sha512',
-            ($payload['order_id'] ?? '').
-            ($payload['status_code'] ?? '').
-            ($payload['gross_amount'] ?? '').
-            config('midtrans.server_key')
-        );
+        $keys = array_unique(array_filter([
+            config('midtrans.signature_key'),
+            config('midtrans.server_key'),
+        ]));
 
-        // hash_equals lebih aman daripada === untuk membandingkan hash
-        return hash_equals($expected, (string) ($payload['signature_key'] ?? ''));
+        foreach ($keys as $key) {
+            $expected = hash('sha512',
+                ($payload['order_id'] ?? '').
+                ($payload['status_code'] ?? '').
+                ($payload['gross_amount'] ?? '').
+                $key
+            );
+
+            if (hash_equals($expected, (string) ($payload['signature_key'] ?? ''))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

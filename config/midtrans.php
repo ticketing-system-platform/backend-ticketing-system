@@ -7,6 +7,9 @@ return [
     'client_key' => env('MIDTRANS_CLIENT_KEY'),
     'is_production' => env('MIDTRANS_IS_PRODUCTION', false),
 
+    'signature_key' => env('MIDTRANS_SIGNATURE_KEY') ?: env('MIDTRANS_SERVER_KEY'),
+
+    
     // Opsional. Jika diisi, webhook transaksi dari server ini dikirim ke URL ini,
     // bukan ke Notification URL di dashboard Midtrans. Berguna agar laptop (ngrok)
     // dan VPS bisa memakai satu akun Sandbox yang sama.
